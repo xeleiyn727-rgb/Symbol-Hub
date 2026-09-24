@@ -4,19 +4,38 @@
         local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/<user>/<repo>/main/CustomHubUI.lua"))()
     then:
         local Window = Library.CreateWindow({ Title = "My Hub", Subtitle = "v1.0" })
-        local Tab = Window:AddTab("Main", "rbxassetid://<your icon id>") -- icon is optional
+        local Tab = Window:AddTab("Main", "house") -- icon can be a Lucide name, rbxassetid, or text
         Tab:AddToggle({ Title = "Auto Farm", Description = "...", Default = false, Callback = function(v) end })
 ]]
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local InsertService = game:GetService("InsertService")
 
 local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
 
 local Library = {}
 Library.Version = "1.0.0"
+
+-- ===== โหลดไลบรารีไอคอน Lucide (มีให้เลือกกว่า 1,400 ไอคอน เส้นเรียบ) =====
+-- โหลดครั้งเดียวตอน require โมดูลนี้ ใช้ร่วมกันได้ทุก Window/Tab ที่สร้างขึ้นมา
+local Lucide
+do
+    local ok, model = pcall(function()
+        return InsertService:LoadAsset(15279939717) -- Lucide Icons Library (Roblox Marketplace)
+    end)
+    if ok and model then
+        local moduleScript = model:FindFirstChildWhichIsA("ModuleScript", true)
+        if moduleScript then
+            local ok2, lib = pcall(require, moduleScript)
+            if ok2 then
+                Lucide = lib
+            end
+        end
+    end
+end
 
 -- ===== Theme Palettes =====
 local Palettes = {
@@ -1158,15 +1177,37 @@ function Library.CreateWindow(config)
 
         -- The icon is up to the user of the library:
         --   "rbxassetid://123" or just 123  -> image icon
+        --   a valid Lucide icon name (e.g. "house", "layout-dashboard") -> Lucide icon (auto-detected)
         --   any other text (e.g. "★")        -> text icon
         --   nil / ""                         -> no icon at all
         icon = (icon ~= nil) and tostring(icon) or ""
-        local isImage = icon:match("^rbxassetid://") or icon:match("^https?://") or icon:match("^%d+$")
+        local isRawImage = icon:match("^rbxassetid://") or icon:match("^https?://") or icon:match("^%d+$")
+
+        local lucideAsset = nil
+        if not isRawImage and icon ~= "" and Lucide then
+            local ok, asset = pcall(function()
+                return Lucide.GetAsset(icon, 32)
+            end)
+            if ok and asset then
+                lucideAsset = asset
+            end
+        end
+
+        local isImage = isRawImage or (lucideAsset ~= nil)
 
         local Icon
-        if isImage then
+        if isRawImage then
             Icon = Instance.new("ImageLabel")
             Icon.Image = icon:match("^%d+$") and ("rbxassetid://" .. icon) or icon
+            Icon.ScaleType = Enum.ScaleType.Fit
+            Icon.AnchorPoint = Vector2.new(0.5, 0.5)
+            Icon.Position = UDim2.fromScale(0.5, 0.5)
+            Icon.Size = UDim2.fromOffset(16, 16)
+        elseif lucideAsset then
+            Icon = Instance.new("ImageLabel")
+            Icon.Image = lucideAsset.Url
+            Icon.ImageRectOffset = lucideAsset.ImageRectOffset
+            Icon.ImageRectSize = lucideAsset.ImageRectSize
             Icon.ScaleType = Enum.ScaleType.Fit
             Icon.AnchorPoint = Vector2.new(0.5, 0.5)
             Icon.Position = UDim2.fromScale(0.5, 0.5)
