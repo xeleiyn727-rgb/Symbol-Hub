@@ -227,18 +227,14 @@ function Library.CreateWindow(config)
     local isOpen = false
     local function OpenWindow()
         isOpen = true
+        Main.GroupTransparency = 0
+        MainScale.Scale = 1
         Main.Visible = true
-        Tween(Main, 0.3, { GroupTransparency = 0 })
-        Tween(MainScale, 0.4, { Scale = 1 }, Enum.EasingStyle.Back)
     end
 
     local function CloseWindow()
         isOpen = false
-        Tween(Main, 0.2, { GroupTransparency = 1 })
-        local t = Tween(MainScale, 0.2, { Scale = 0.9 }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
-        t.Completed:Connect(function()
-            if not isOpen then Main.Visible = false end
-        end)
+        Main.Visible = false
     end
 
     -- ===== Title Bar =====
