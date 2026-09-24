@@ -4,38 +4,19 @@
         local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/<user>/<repo>/main/CustomHubUI.lua"))()
     then:
         local Window = Library.CreateWindow({ Title = "My Hub", Subtitle = "v1.0" })
-        local Tab = Window:AddTab("Main", "house") -- icon can be a Lucide name, rbxassetid, or text
+        local Tab = Window:AddTab("Main", "house") -- icon: Lucide name, "rbxassetid://<id>", a single character, or nil
         Tab:AddToggle({ Title = "Auto Farm", Description = "...", Default = false, Callback = function(v) end })
 ]]
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
-local InsertService = game:GetService("InsertService")
 
 local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
 
 local Library = {}
-Library.Version = "1.0.0"
-
--- ===== โหลดไลบรารีไอคอน Lucide (มีให้เลือกกว่า 1,400 ไอคอน เส้นเรียบ) =====
--- โหลดครั้งเดียวตอน require โมดูลนี้ ใช้ร่วมกันได้ทุก Window/Tab ที่สร้างขึ้นมา
-local Lucide
-do
-    local ok, model = pcall(function()
-        return InsertService:LoadAsset(15279939717) -- Lucide Icons Library (Roblox Marketplace)
-    end)
-    if ok and model then
-        local moduleScript = model:FindFirstChildWhichIsA("ModuleScript", true)
-        if moduleScript then
-            local ok2, lib = pcall(require, moduleScript)
-            if ok2 then
-                Lucide = lib
-            end
-        end
-    end
-end
+Library.Version = "1.1.0"
 
 -- ===== Theme Palettes =====
 local Palettes = {
@@ -127,6 +108,35 @@ local function GetGuiParent()
     end)
     if ok and res then return res end
     return PlayerGui
+end
+
+-- ===== Lucide icon resolver =====
+local IconLib = nil
+local IconLibTried = false
+
+local function ResolveLucide(name)
+    if not IconLibTried then
+        IconLibTried = true
+        local ok, mod = pcall(function()
+            return loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/Icons/main/Main-v2.lua"))()
+        end)
+        if ok and type(mod) == "table" then
+            IconLib = mod
+            if mod.SetIconsType then pcall(mod.SetIconsType, "lucide") end
+        end
+    end
+    if not IconLib then return nil end
+
+    local fn = IconLib.Icon or IconLib.GetIcon
+    if not fn then return nil end
+    local ok, data = pcall(fn, name)
+    if not ok or type(data) ~= "table" then return nil end
+
+    -- supports both {image, {ImageRectSize, ImageRectPosition}} and named fields
+    local image = data[1] or data.Image or data.Id
+    local rect = data[2] or data
+    if not image then return nil end
+    return image, rect.ImageRectPosition, rect.ImageRectSize
 end
 
 -- =====================================================================
@@ -1177,37 +1187,33 @@ function Library.CreateWindow(config)
 
         -- The icon is up to the user of the library:
         --   "rbxassetid://123" or just 123  -> image icon
-        --   a valid Lucide icon name (e.g. "house", "layout-dashboard") -> Lucide icon (auto-detected)
-        --   any other text (e.g. "★")        -> text icon
+        --   a Lucide name longer than 2 chars (e.g. "house") -> resolved to a Lucide image
+        --   a short text (e.g. "★")          -> text icon
         --   nil / ""                         -> no icon at all
         icon = (icon ~= nil) and tostring(icon) or ""
-        local isRawImage = icon:match("^rbxassetid://") or icon:match("^https?://") or icon:match("^%d+$")
+        local isImage = icon:match("^rbxassetid://") or icon:match("^https?://") or icon:match("^%d+$")
 
-        local lucideAsset = nil
-        if not isRawImage and icon ~= "" and Lucide then
-            local ok, asset = pcall(function()
-                return Lucide.GetAsset(icon, 32)
-            end)
-            if ok and asset then
-                lucideAsset = asset
+        local imgId, rectPos, rectSize
+        if not isImage and icon ~= "" and (utf8.len(icon) or #icon) > 2 then
+            -- longer than 2 characters: treat as a Lucide icon name
+            imgId, rectPos, rectSize = ResolveLucide(icon)
+            if imgId then
+                isImage = true
+            else
+                icon = "" -- not found: show no icon (avoids text overflowing onto the tab name)
             end
         end
 
-        local isImage = isRawImage or (lucideAsset ~= nil)
+        Tile.ClipsDescendants = true
 
         local Icon
-        if isRawImage then
+        if isImage then
             Icon = Instance.new("ImageLabel")
-            Icon.Image = icon:match("^%d+$") and ("rbxassetid://" .. icon) or icon
-            Icon.ScaleType = Enum.ScaleType.Fit
-            Icon.AnchorPoint = Vector2.new(0.5, 0.5)
-            Icon.Position = UDim2.fromScale(0.5, 0.5)
-            Icon.Size = UDim2.fromOffset(16, 16)
-        elseif lucideAsset then
-            Icon = Instance.new("ImageLabel")
-            Icon.Image = lucideAsset.Url
-            Icon.ImageRectOffset = lucideAsset.ImageRectOffset
-            Icon.ImageRectSize = lucideAsset.ImageRectSize
+            Icon.Image = imgId or (icon:match("^%d+$") and ("rbxassetid://" .. icon) or icon)
+            if rectPos and rectSize then
+                Icon.ImageRectOffset = rectPos
+                Icon.ImageRectSize = rectSize
+            end
             Icon.ScaleType = Enum.ScaleType.Fit
             Icon.AnchorPoint = Vector2.new(0.5, 0.5)
             Icon.Position = UDim2.fromScale(0.5, 0.5)
@@ -1224,7 +1230,7 @@ function Library.CreateWindow(config)
         Icon.Parent = Tile
         Bind(Icon, isImage and "ImageColor3" or "TextColor3", function() return isSel() and Theme.Text or Theme.SubText end)
 
-        local hasIcon = icon ~= ""
+        local hasIcon = icon ~= "" or isImage
         Tile.Visible = hasIcon
         local baseX = hasIcon and 43 or 13 -- label x position (moves left when there is no icon)
 
